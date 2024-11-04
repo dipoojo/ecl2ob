@@ -19,10 +19,24 @@ from utils.dataset import TrajectCR_Dataset
 from tqdm import tqdm
 import json 
 import argparse
+import logging
 
 n_iter = 0
 n_iter_val = 0
 use_cuda = False
+#logging.basicConfig(filename='pytorch_log.txt', level=logging.INFO)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+handler = logging.FileHandler('pytorch_log.txt')
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter.maxStringLength = 1000
+
+handler.setFormatter(formatter)
+
+logger.addHandler(handler)
 
 def train_cr_vals(ml_model, optimizer, train_dataloader, val_dataloader, demand_validation, 
             num_epoch, switch_weight, min_cr, temp_seq, input_dict, op_temp_cost_array, df_train, df_test,
@@ -135,7 +149,7 @@ def train_cr_vals(ml_model, optimizer, train_dataloader, val_dataloader, demand_
                 #ml_model.eval()
                 #print(f'epoch is {epoch}')
                 tmval = ml_model(torch.from_numpy(temp_seq[i]).float(), mode="val", calib=input_dict["testcalib"])
-                #print(tmval.shape)
+                print(f'tmval is {tmval.shape}')
                 #print(torch.max(tmval))
                 hit_cost = torch.norm(tmval - torch.from_numpy(temp_seq[i]).float(), dim=1)
                 hit_cost = (hit_cost)**2 #remove 1/2
@@ -180,7 +194,7 @@ def train_cr_vals_dynamic(ml_model, optimizer, train_dataloader, val_dataloader,
         for k, (demand,opt_cost) in enumerate(train_dataloader):
             demand = demand.float()
             opt_cost = torch.reshape(opt_cost, (opt_cost.shape[0], 1))
-            
+            #demand = demand[:,4:29,:]
             if use_cuda: 
                 demand = demand.cuda()
                 opt_cost = opt_cost.cuda()
@@ -188,21 +202,21 @@ def train_cr_vals_dynamic(ml_model, optimizer, train_dataloader, val_dataloader,
             optimizer.zero_grad()
             
             action_ml, p2 = ml_model(demand, opt_cost, calib = calib)
-            
-            
+            demand_loss = demand[:,4:29,:]
+            #print(f'demand shape is {demand.shape} ')
             if mtl_weight == 1.0:
                 loss_calib = torch.zeros((1,1))
                 
-                loss_ml = object_loss_cost(demand, action_ml, c=switch_weight)
+                loss_ml = object_loss_cost(demand_loss, action_ml, c=switch_weight)
                 # loss_ml = object_loss_cr(demand, action_ml, opt_cost, min_cr = min_cr, c=switch_weight)
                 loss = loss_ml
                 #print(f'loss is {loss}')
 
             else:
-                loss_ml = objlr(demand, action_ml, opt_cost, min_cr = min_cr, c=switch_weight)
+                loss_ml = objlr(demand_loss, action_ml, opt_cost, min_cr = min_cr, c=switch_weight)
                 
                 action_calib, p2_calib  = ml_model(demand, opt_cost, calib = calib)
-                loss_calib = object_loss_cost(demand, action_calib, c = switch_weight)
+                loss_calib = object_loss_cost(demand_loss, action_calib, c = switch_weight)
                 
                 loss = mtl_weight*loss_ml + (1-mtl_weight)*loss_calib
                 #print(f'final loss is {loss}')
@@ -229,9 +243,11 @@ def train_cr_vals_dynamic(ml_model, optimizer, train_dataloader, val_dataloader,
                 opt_cost = torch.reshape(opt_cost, (opt_cost.shape[0], 1))
                 #opt_cost = np.expand_dims(opt_cost, axis=1)
                 #opt_cost = opt_cost.float()
+                demand_loss = demand[:,4:29,:]
                 if use_cuda: 
                     demand = demand.cuda()
                     opt_cost = opt_cost.cuda()
+                    demand_loss = demand_loss.cuda()
                     #print(demand.shape)
                     #print(opt_cost.shape)
                     # zero the parameter gradients
@@ -241,7 +257,7 @@ def train_cr_vals_dynamic(ml_model, optimizer, train_dataloader, val_dataloader,
                     #action_ml = ml_model(demand, torch.from_numpy(opt_cost).float(), calib = calib)
                 action_ml, p2_val = ml_model(demand, opt_cost, mode="val", calib = False)
                 action_val_calib, p2_val_calib  = ml_model(demand, opt_cost, mode="val", calib = input_dict["testcalib"])
-                loss_val_calib += object_loss_cost(demand, action_val_calib, c = switch_weight)
+                loss_val_calib += object_loss_cost(demand_loss, action_val_calib, c = switch_weight)
                 #print(f'demand validation dynamic = {demand.shape}')
             #action_val_ml    = ml_model(demand_validation, opt_cost_dynamic, mode="val", calib=False)
             #action_val_calib = ml_model(demand_validation, opt_cost_dynamic, mode="val", calib=True)
@@ -263,7 +279,7 @@ def train_cr_vals_dynamic(ml_model, optimizer, train_dataloader, val_dataloader,
                 ml_model.eval()
                 for _, (demand,opt_cost) in enumerate(temp_dataloader[i]):
                         demand = demand.float()
-                        
+                        demand_loss = demand[:,4:29,:]
                         opt_cost = torch.reshape(opt_cost, (opt_cost.shape[0], 1))
                         #opt_cost = np.expand_dims(opt_cost, axis=1)
                         #opt_cost = opt_cost.float()
@@ -283,7 +299,9 @@ def train_cr_vals_dynamic(ml_model, optimizer, train_dataloader, val_dataloader,
                 #print(tmval.shape)
                 #print(torch.max(tmval))
                         #print(f'{tmval}')        
-                hit_cost = torch.norm(tmval - torch.from_numpy(temp_seq[i]).float(), dim=1)
+                print(f'tmval shape is {tmval.shape}')
+                print(f'tempseq shape is temp {torch.from_numpy(temp_seq[i]).shape}')
+                hit_cost = torch.norm(tmval - torch.from_numpy(temp_seq[i]).float()[:,5:30,:], dim=1)
                 hit_cost = (hit_cost)**2 #remove division by 2
                 #print(torch.max(hit_cost))
 
@@ -305,6 +323,10 @@ def train_cr_vals_dynamic(ml_model, optimizer, train_dataloader, val_dataloader,
                      quarter_list = [i+1]*norm_cost.shape[0]
                      df_temp = pd.DataFrame({list(df_testp.columns.values)[0]:dict_list, list(df_testp.columns.values)[1]:quarter_list, list(df_testp.columns.values)[2]:p2_test.flatten().tolist(), list(df_testp.columns.values)[3]:norm_cost.flatten().tolist()}) 
                      df_testp.loc[range((i-1)*p2_test.shape[0],(i)*p2_test.shape[0])] = df_temp.values
+                     logger.info(f"rho:\n{p2_test.flatten().tolist()}")
+                     logger.info(f"Output value:\n{tmval.flatten().tolist()}")
+
+
             #print(f'norm cost {norm_cost.shape}, rho {p2_test.shape}') #journal change
         if epoch%5 == 0:
            print(epoch)        

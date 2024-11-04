@@ -210,6 +210,8 @@ if __name__ == "__main__":
 
     input_size = 2 * num_classes
     seq_length = 25
+    window_size = 30 # sequence length plus input length for seq to one otuput
+    input_length = 5 #
     num_layers = 3
     base_log_dir = "./ec_l2o_log/"
 
@@ -326,7 +328,7 @@ if __name__ == "__main__":
     ecl20b["testcalib"] = True
     ecl20b["name"] = "ecl20b"
 
-    epoch_number = 80 #80 journal change
+    epoch_number = 3 #80 journal change
     lr = 4e-4
     
     #def replication(input_dict, csv_file, epoch_number=25, lr=4e-4):
@@ -439,10 +441,10 @@ if __name__ == "__main__":
         #train_cr_vals(lstm, optimizer, writer, train_dataloader, val_seq_tensor, 
         #            epoch_num, pureml["c"], min_cr, mtl_weight=pureml["mtl_weight"], mute=mute, l_1=pureml["l1"],l_2=pureml["l2"], l_3=pureml["l3"], calib=pureml["calib"])
         
-        #train_cr_vals(lstm, optimizer, train_dataloader, val_dataloader, val_seq_tensor,
-         #       epoch_num, input_dict["c"], min_cr,temp_seq,input_dict,op_temp_cost_array, df_train, df_test,
-         #       df_val, mtl_weight=input_dict["mtl_weight"], mute=mute, l_1=input_dict["l1"],
-          #      l_2=input_dict["l2"], l_3=input_dict["l3"], calib=input_dict["traincalib"])
+        train_cr_vals(lstm, optimizer, train_dataloader, val_dataloader, val_seq_tensor,
+               epoch_num, input_dict["c"], min_cr,temp_seq,input_dict,op_temp_cost_array, df_train, df_test,
+               df_val, mtl_weight=input_dict["mtl_weight"], mute=mute, l_1=input_dict["l1"],
+              l_2=input_dict["l2"], l_3=input_dict["l3"], calib=input_dict["traincalib"])
         
         
         train_cr_vals_dynamic(lstm_dynamic, optimizer_dy, train_dataloader, val_dataloader,temp_dataloader, temp_seq,
